@@ -156,6 +156,15 @@ class Units(unittest.TestCase):
         self.assertEqual(c.norm_name("Bank of New York Mellon Corp."), "BANK OF NEW YORK MELLON")
         self.assertNotEqual(c.norm_name("MELLON"), c.norm_name("TAMARA MELLON BRAND INC"))
 
+    def test_and_co_legal_form_matches_plain_name(self):
+        # Exact names the USCIS H-1B Employer Data Hub lists for FY2026 (searched 2026-10-12).
+        self.assertEqual(c.norm_name("GOLDMAN SACHS AND CO LLC"), "GOLDMAN SACHS")
+        self.assertEqual(c.norm_name("GOLDMAN SACHS AND CO LLC"), c.norm_name("Goldman Sachs"))
+        # The fix must not merge a different firm: "J GOLDMAN AND CO L P" is not Goldman Sachs.
+        self.assertNotEqual(c.norm_name("J GOLDMAN AND CO L P"), c.norm_name("Goldman Sachs"))
+        # An "AND" inside a name is kept.
+        self.assertEqual(c.norm_name("PROCTER AND GAMBLE CO"), "PROCTER AND GAMBLE")
+
 
 if __name__ == "__main__":
     unittest.main()

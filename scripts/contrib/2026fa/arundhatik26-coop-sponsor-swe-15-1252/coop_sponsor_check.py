@@ -61,7 +61,12 @@ def labeled(value, source, **prov):
 
 def norm_name(s):
     s = re.sub(r"[^A-Z0-9 ]", " ", (s or "").upper())
-    return " ".join(w for w in s.split() if w not in SUFFIXES)
+    words = [w for w in s.split() if w not in SUFFIXES]
+    # A connector left dangling once the legal form is gone ("... AND CO LLC") belongs to the legal form.
+    # Found by evaluation row 3 on 2026-10-12: "GOLDMAN SACHS AND CO LLC" had become "GOLDMAN SACHS AND".
+    while words and words[-1] == "AND":
+        words.pop()
+    return " ".join(words)
 
 
 def to_float(x):
