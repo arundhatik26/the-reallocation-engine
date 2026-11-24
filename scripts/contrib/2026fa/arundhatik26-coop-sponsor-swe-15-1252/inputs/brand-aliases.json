@@ -1,0 +1,4 @@
+{
+  "_comment": "YOUR INPUT, hand-written. Brand name → legal name(s) as the 80 Days CSV stores them. Only for brands no word of which appears in the legal name. Every alias hit still goes to a human (gate G2). Added 2026-11-23 for eval row 25 (SoFi).",
+  "SoFi": ["Social Finance"]
+}

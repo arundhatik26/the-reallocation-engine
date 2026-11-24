@@ -77,3 +77,12 @@ matching résumé title; repeats now read "(already counted, +0)". (2) The `skil
 `test_justification_lines_sum_to_score` fails on the old script (lines 10.0 vs score 7.5)
 and passes on the new; 23 tests pass. Verdicts and scores are unchanged, so earlier runs'
 decisions stand; only their printed justifications under-explained them.
+
+### 2026-11-23 — arundhatik26-coop-sponsor-swe-15-1252 · brand-name lookup
+Eval rows 19/20/25 (2026-10-25): typing Robinhood, SoFi or Chime missed the legal-name rows (ROBINHOOD MARKETS INC 824,
+SOCIAL FINANCE INC 182, CHIME FINANCIAL INC 580; Chime auto-matched CHIME INC, 2). Student's predictions written first
+(2026-11-23 15:32 EST, course repo `fall-2026/arundhati-k/final-film/PREDICTIONS.md`). Fix: first-whole-word candidates +
+a your-input alias file; any non-exact hit → ambiguous → human check (G2). 8 new tests + 1 rewritten
+(`test_substring_does_not_match` → `test_first_word_is_a_candidate_never_a_match`); 9 failed before the fix, 26 pass after.
+Same 25 companies, same CSV (sha256 unchanged): strong sponsors missed 3 → 0, wrong automatic answers 1 → 0, human checks 0 → 6
+(Plaid, Robinhood, Chime, Ramp, Coinbase, SoFi). Not done: USCIS hub as a second source.

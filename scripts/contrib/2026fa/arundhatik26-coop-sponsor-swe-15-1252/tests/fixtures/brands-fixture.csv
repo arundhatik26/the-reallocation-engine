@@ -1,0 +1,9 @@
+company_name,industry,state,latest_funding_date,Total Approvals,Total Denials,Approval_Rate,median_salary_offered,top_job_titles_sponsored
+CHIME FINANCIAL INC,Other Technology,CA,2021-08-06,580.0,2.0,99.65635738831617,240108.0,['Senior Software Engineer']
+CHIME INC,Other,NY,2016-05-13,2.0,0.0,100.0,133869.0,['Senior Growth Marketing Manager']
+ROBINHOOD MARKETS INC,Other Technology,CA,2020-08-13,824.0,24.0,97.16981132075472,186000.0,"['Software Engineer', 'Senior Software Engineer', 'Senior Staff Software Engineer', 'Engineering Manager', 'Senior Corporate Accountant']"
+ROBINHOOD VENTURES LLC-FINAUTO VENTURE-1,Business Services,TX,,,,,,
+SOCIAL FINANCE INC,Other Banking and Financial Services,CA,2020-12-30,182.0,0.0,100.0,169488.0,"['Staff Software Engineer', 'Senior Director, Marketing Analytics and Data Science', 'Business Intelligence Manager, Relay', 'Senior Engineer, Software ', 'Senior Compliance Projects and Program Manager']"
+SOCIAL FINANCE NY STATE WORKFORCE RE-ENTRY 2013 LLC,Other,MA,2013-12-27,,,,,
+SOFI TECHNOLOGIES INC,Other Banking and Financial Services,CA,2022-03-03,,,,,
+ARCHIMEDES DECOY INC,Other,CA,,50.0,0.0,100.0,100000.0,['Software Engineer']

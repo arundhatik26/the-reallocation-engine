@@ -31,6 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
 
 DEFAULT_INPUT = os.path.join(HERE, "inputs", "sample-persona.json")
+DEFAULT_ALIASES = os.path.join(HERE, "inputs", "brand-aliases.json")
 DEFAULT_OUT = os.path.join(REPO, "course", "2026fa", "submissions", "arundhatik26", "runs", "sample")
 SPONSOR_CSV = "data/80-days-to-stay/80-days-csv/mapped_student_employment_targets_v3.csv"
 BLS_CSV = "data/bls/compact/soc_occupation_compact.csv"
@@ -145,27 +146,72 @@ def load_liveness(path):
 
 # ── evidence ───────────────────────────────────────────────────────────────
 
-def resolve_company(role, idx, rules):
-    """Exact (suffix-stripped) match on any of role['match_names'].
+def load_aliases(path):
+    """Brand → legal-name aliases, hand-written by the user (your-input). Missing path → no aliases.
+
+    Added 2026-11-23 for eval row 25: "SoFi" is stored as SOCIAL FINANCE INC, which no word of "SoFi" can reach.
+    Keys starting with "_" are comments. Names are normalised the same way as the CSV.
+    """
+    if not path or not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    return {norm_name(k): [norm_name(v) for v in vals]
+            for k, vals in raw.items() if not k.startswith("_")}
+
+
+FIRST_WORDS = "first word(s) of the name"
+
+
+def starts_with_words(key, q):
+    """True when q is the whole key or its first whole word(s): 'CHIME' → 'CHIME FINANCIAL', never 'ARCHIMEDES'."""
+    return bool(q) and (key == q or key.startswith(q + " "))
+
+
+def resolve_company(role, idx, rules, aliases=None):
+    """Exact (suffix-stripped) match on any of role['match_names'], plus candidates for a human.
 
     statuses: matched | not-in-dataset | no-sponsorship-record | ambiguous
+
+    Brand-name fix (2026-11-23, eval rows 19/20/25): rows whose name STARTS WITH the typed words, and rows reached
+    through the user's alias list, are listed as candidates. Any candidate that is not an exact name makes the
+    result 'ambiguous' — a human picks (gate G2). Nothing is auto-matched that was not typed exactly.
     """
     names = role.get("match_names") or [role["company"]]
+    aliases = aliases or {}
     hits = {}
     for n in names:
         for row in idx.get(norm_name(n), []):
-            hits[row["_line"]] = row
-    rows = list(hits.values())
+            hits[row["_line"]] = (row, "exact name")
+    lookups = []
+    for n in names:
+        q = norm_name(n)
+        lookups.append((q, FIRST_WORDS))
+        for a in aliases.get(q, []):
+            lookups.append((a, f"alias {q} → {a} (your input)"))
+    for key, krows in idx.items():
+        for q, how in lookups:
+            if starts_with_words(key, q):
+                for row in krows:
+                    hits.setdefault(row["_line"], (row, how))
+    rows = [r for r, _ in hits.values()]
+    found_by = {r["_line"]: how for r, how in hits.values()}
+    used_aliases = {norm_name(n): aliases[norm_name(n)] for n in names if norm_name(n) in aliases}
     base = {"searched_names": labeled(names, YOU), "csv": SPONSOR_CSV}
+    if used_aliases:
+        base["aliases_used"] = labeled(used_aliases, YOU)
 
     if not rows:
         return {**base, "status": "not-in-dataset", "rows": [],
                 "note": "No row in the 80 Days CSV. This is NOT evidence the company does not sponsor."}
-    if len(rows) > 1:
+    if len(rows) > 1 or any(h != "exact name" for h in found_by.values()):
         return {**base, "status": "ambiguous",
                 "rows": [{"csv_line": r["_line"], "company_name": r["company_name"],
-                          "total_approvals": to_float(r["Total Approvals"])} for r in rows],
-                "note": "More than one CSV row matched. A human must decide which (if any) is this employer (gate G2)."}
+                          "total_approvals": to_float(r["Total Approvals"]),
+                          "found_by": found_by[r["_line"]]}
+                         for r in sorted(rows, key=lambda r: -(to_float(r["Total Approvals"]) or 0))],
+                "note": ("More than one CSV row matched, or a row was found by its first word(s) or an alias. "
+                         "A human must decide which (if any) is this employer (gate G2).")}
 
     r = rows[0]
     approvals = to_float(r["Total Approvals"])
@@ -343,7 +389,7 @@ def render_report(log):
             ce = (f"{c['tier']['value']} [your-input rule] — {fmt(c['total_approvals']['value'])} approvals, "
                   f"software titles: {len(c['software_titles']['value'])} [record]")
         elif c["status"] == "ambiguous":
-            ce = "AMBIGUOUS: " + "; ".join(f"{x['company_name']} ({fmt(x['total_approvals'])})" for x in c["rows"]) + " [record]"
+            ce = "AMBIGUOUS: " + "; ".join(f"{x['company_name']} ({fmt(x['total_approvals'])}, {x.get('found_by', 'exact name')})" for x in c["rows"]) + " [record]"
         else:
             ce = f"{c['status']} [record]"
         lv = f"{r['liveness']['status']} → {r['liveness']['factor']['value']} [{r['liveness']['factor']['source']}]"
@@ -430,13 +476,15 @@ def run(input_path, out_dir, sponsor_csv=None, bls_csv=None):
     idx = load_sponsor_index(sponsor_path)
     bls = load_bls(bls_path)
     live = load_liveness(live_abs)
+    alias_rel = cfg.get("brand_aliases")
+    aliases = load_aliases(os.path.join(REPO, alias_rel) if alias_rel else DEFAULT_ALIASES)
 
     os.makedirs(out_dir, exist_ok=True)
     per_role = []
     for role in cfg["roles"]:
         role["_liveness_path"] = live_path
         per_role.append({"role": role,
-                         "company": resolve_company(role, idx, cfg["rules"]),
+                         "company": resolve_company(role, idx, cfg["rules"], aliases),
                          "liveness": liveness_gate(role, live)})
 
     scenario_results = {}

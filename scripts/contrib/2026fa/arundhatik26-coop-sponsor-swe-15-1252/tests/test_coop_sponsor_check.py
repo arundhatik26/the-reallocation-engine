@@ -84,9 +84,14 @@ class FullRun(unittest.TestCase):
         self.assertEqual(len(r["company"]["rows"]), 2)
         self.assertTrue(r["next_action"].startswith("HUMAN CHECK"))
 
-    def test_substring_does_not_match(self):
-        # "ACME" must not match "ACME SOFTWARE INC" or "ACME DECOY BRAND INC"
-        self.assertEqual(self.by["decoy-substring"]["company"]["status"], "not-in-dataset")
+    def test_first_word_is_a_candidate_never_a_match(self):
+        # Changed 2026-11-23 with the brand-name fix. Before: "ACME" found nothing. Now "ACME" is the first word of
+        # "ACME SOFTWARE INC" and "ACME DECOY BRAND INC", so both are listed for a human (gate G2) — still never
+        # auto-matched, which is what the old test protected.
+        comp = self.by["decoy-substring"]["company"]
+        self.assertEqual(comp["status"], "ambiguous")
+        self.assertEqual({r["company_name"] for r in comp["rows"]}, {"ACME SOFTWARE INC", "ACME DECOY BRAND INC"})
+        self.assertTrue(self.by["decoy-substring"]["next_action"].startswith("HUMAN CHECK"))
 
     def test_F4_tiers(self):
         self.assertEqual(self.by["likely-small"]["company"]["tier"]["value"], "Likely")
@@ -164,6 +169,71 @@ class Units(unittest.TestCase):
         self.assertNotEqual(c.norm_name("J GOLDMAN AND CO L P"), c.norm_name("Goldman Sachs"))
         # An "AND" inside a name is kept.
         self.assertEqual(c.norm_name("PROCTER AND GAMBLE CO"), "PROCTER AND GAMBLE")
+
+
+BRANDS = os.path.join(FIX, "brands-fixture.csv")   # exact dataset rows for the three brands (+ one invented decoy)
+RULES = {"proven_min_approvals": 100, "p_proven": 0.9, "p_likely": 0.6, "p_sponsors_not_software": 0.3}
+ALIASES = {"SOFI": ["SOCIAL FINANCE"]}
+
+
+class BrandNames(unittest.TestCase):
+    """Eval rows 19, 20, 25 (2026-10-25): the brand name hid a strong sponsor stored under its legal name.
+    Predictions for this fix were written first: final-film/PREDICTIONS.md, 2026-11-23 15:32 EST."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.idx = c.load_sponsor_index(BRANDS)
+
+    def look(self, name, aliases=None):
+        return c.resolve_company({"company": name}, self.idx, RULES, aliases)
+
+    def names(self, comp):
+        return {r["company_name"] for r in comp["rows"]}
+
+    def test_robinhood_lists_robinhood_markets_for_a_human(self):
+        comp = self.look("Robinhood")
+        self.assertEqual(comp["status"], "ambiguous")
+        self.assertIn("ROBINHOOD MARKETS INC", self.names(comp))
+
+    def test_chime_lists_chime_financial_not_only_chime_inc(self):
+        comp = self.look("Chime")
+        self.assertEqual(comp["status"], "ambiguous")          # was: matched CHIME INC (2) with no human check
+        self.assertEqual(self.names(comp), {"CHIME FINANCIAL INC", "CHIME INC"})
+
+    def test_chime_does_not_pull_in_a_name_that_only_contains_it(self):
+        self.assertNotIn("ARCHIMEDES DECOY INC", self.names(self.look("Chime")))
+
+    def test_sofi_without_alias_misses_social_finance(self):
+        comp = self.look("SoFi")
+        self.assertNotIn("SOCIAL FINANCE INC", self.names(comp))
+
+    def test_sofi_with_alias_lists_social_finance_for_a_human(self):
+        comp = self.look("SoFi", ALIASES)
+        self.assertEqual(comp["status"], "ambiguous")
+        self.assertIn("SOCIAL FINANCE INC", self.names(comp))
+
+    def test_every_candidate_says_how_it_was_found(self):
+        comp = self.look("SoFi", ALIASES)
+        how = {r["company_name"]: r["found_by"] for r in comp["rows"]}
+        self.assertEqual(how["SOFI TECHNOLOGIES INC"], "first word(s) of the name")
+        self.assertTrue(how["SOCIAL FINANCE INC"].startswith("alias"))
+
+    def test_a_single_candidate_is_still_not_auto_answered(self):
+        # One row found only by first word or alias still goes to a human: it is a guess, not an exact name.
+        comp = self.look("Robinhood Markets")
+        self.assertEqual(comp["status"], "matched")              # exact name → matched, as before
+        idx = c.load_sponsor_index(BRANDS)
+        one = c.resolve_company({"company": "Social"}, idx, RULES)
+        self.assertEqual(one["status"], "ambiguous")             # 2 SOCIAL FINANCE rows, by first word
+        lone = c.resolve_company({"company": "Archimedes"}, idx, RULES)
+        self.assertEqual(lone["status"], "ambiguous")            # 1 row, first word only → still a human check
+        self.assertEqual(len(lone["rows"]), 1)
+
+    def test_alias_file_loads_and_is_your_input(self):
+        path = os.path.join(os.path.dirname(HERE), "inputs", "brand-aliases.json")
+        al = c.load_aliases(path)
+        self.assertIn("SOFI", al)
+        self.assertEqual(c.load_aliases(None), {})
 
 
 if __name__ == "__main__":
